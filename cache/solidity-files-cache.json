@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\dell\\Desktop\\initial\\contracts\\Presale.sol": {
-      "lastModificationDate": 1781811450116,
-      "contentHash": "014b4fe6702c579f0633c4b6a394579a",
+      "lastModificationDate": 1781812634828,
+      "contentHash": "bb232f5d683b25106bc429abfb05bf70",
       "sourceName": "contracts/Presale.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -35,7 +35,7 @@
         "@openzeppelin/contracts/access/Ownable.sol"
       ],
       "versionPragmas": [
-        "^0.8.20"
+        "^0.8.0"
       ],
       "artifacts": [
         "Presale"
