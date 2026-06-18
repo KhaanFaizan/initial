@@ -21,7 +21,10 @@
     "dev": "node ./scripts/run-log-and-start.js",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "test:contracts": "npx hardhat test",
+    "node": "npx hardhat node",
+    "deploy:local": "npx hardhat run scripts/deploy.js --network localhost"
   },
   "eslintConfig": {
     "extends": [

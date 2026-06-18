@@ -49,6 +49,100 @@ Files added for smart-contract testing:
 - `test/presale.test.js`
 - `.env.example` (placeholder for external RPC keys if needed)
 
+## Local Development & Buy Flow
+
+Follow these steps in order to run the full presale stack locally — Hardhat node, deployed contracts, and the React frontend — all talking to each other.
+
+### 1. Install dependencies
+
+```powershell
+npm install --legacy-peer-deps
+```
+
+> The `--legacy-peer-deps` flag is required because some web3 libraries have peer-dependency conflicts with the React 19 tree. All Hardhat dev-dependencies are already listed in `package.json`.
+
+### 2. Start the local Hardhat node
+
+Open a dedicated terminal and keep it running throughout your session:
+
+```powershell
+npm run node
+# equivalent: npx hardhat node
+```
+
+Hardhat prints 20 funded test accounts with their private keys on startup. Copy the private key of **Account #0** — you will need it for MetaMask in step 5.
+
+```
+Account #0: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+Private Key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+```
+
+### 3. Deploy the contracts
+
+In a **second** terminal (while the node is running):
+
+```powershell
+npm run deploy:local
+# equivalent: npx hardhat run scripts/deploy.js --network localhost
+```
+
+The deploy script will:
+- Deploy `SimpleERC20` (1 000 000 STAR supply)
+- Deploy `Presale` at **0.001 ETH per token** (1 ETH = 1 000 tokens)
+- Approve and deposit 100 000 tokens into the Presale contract
+- Confirm the presale is open
+- Write `src/contracts/SimpleERC20.json` and `src/contracts/Presale.json` with the deployed addresses and ABIs so the React app can import them directly
+
+### 4. Start the frontend
+
+In a **third** terminal:
+
+```powershell
+npm start
+```
+
+The app opens at [http://localhost:3000](http://localhost:3000). Navigate to the hero section — the **BuyBox** will read the token price live from the contract once your wallet is connected.
+
+### 5. Configure MetaMask
+
+1. Open MetaMask → **Settings → Networks → Add a network manually**.
+2. Fill in these values:
+
+   | Field | Value |
+   |---|---|
+   | Network name | Hardhat Local |
+   | New RPC URL | `http://127.0.0.1:8545` |
+   | Chain ID | `31337` |
+   | Currency symbol | `ETH` |
+   | Block explorer URL | *(leave blank)* |
+
+3. Click **Save**, then switch to the **Hardhat Local** network.
+4. Import the Account #0 private key printed by `npm run node`:
+   - MetaMask → **Import account** → paste the private key.
+   - This account starts with 10 000 ETH on the local network, more than enough to test purchases.
+
+5. Visit [http://localhost:3000](http://localhost:3000), click **Connect Wallet**, and approve the MetaMask prompt.  
+   The UI will switch automatically if your wallet is on the wrong network.
+
+### 6. Run the contract tests
+
+```powershell
+npm run test:contracts
+# equivalent: npx hardhat test
+```
+
+Runs the full Hardhat/Chai test suite in `test/presale.test.js`. All 27 tests should pass without a live node — Hardhat spins up an in-memory network automatically for tests.
+
+---
+
+## Security Decisions
+
+**ReentrancyGuard and the checks-effects-interactions pattern** were both applied to `buy()` as layered, complementary defences rather than choosing one over the other. `ReentrancyGuard` wraps the function in a mutex that reverts any re-entrant call before it even reaches application logic, making it safe even if a future maintainer accidentally reorders the code. The checks-effects-interactions pattern is enforced structurally: all `require()` guards run first, then the `totalRaised` state variable is incremented, and only then does `token.transfer()` execute. This ordering means that if a malicious ERC-20 token were ever substituted (one whose `transfer` callback re-entered `buy()`), the re-entrant call would see an already-updated `totalRaised` and be blocked by the mutex — two independent layers both catching the same attack vector. The explicit `require(token.transfer(...), "...")` wrapper also catches non-reverting tokens that signal failure by returning `false` instead of throwing.
+
+**Access control** is handled through OpenZeppelin's `Ownable`, which restricts `withdraw()`, `setPrice()`, `setOpen()`, and `depositTokens()` to the deployer's address with a single `onlyOwner` modifier. The trade-off here is simplicity over flexibility: a production presale serving thousands of users would likely want a multi-sig (e.g. Gnosis Safe) as the owner so that no single key can drain funds or change the price unilaterally. That upgrade path is trivially available — `transferOwnership(multiSigAddress)` in the deploy script is all it takes — but was left out to keep the local development workflow frictionless. Similarly, `withdraw()` uses a low-level `call` rather than `transfer` to avoid the 2 300-gas stipend limitation that would silently block withdrawal if the owner address were ever a contract with a non-trivial `receive()`. The returned success flag is explicitly checked so a failed ETH send always reverts rather than silently swallowing funds.
+
+---
+
 ## Assignment: Presale integration & audit exercise
 
 This repository is intentionally structured as a short, practical evaluation for a senior blockchain/front-end engineer. The assignment below contains required tasks, acceptance criteria, hints, and a scoring rubric. Candidates should treat this as a take-home exercise and aim to produce a clear, maintainable solution.
