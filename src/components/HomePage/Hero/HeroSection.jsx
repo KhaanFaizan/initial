@@ -1,6 +1,8 @@
-import React, { useState } from "react";
-import { FiX, FiCopy, FiSearch } from "react-icons/fi";
+import React, { useState, useMemo } from "react";
+import { FiX, FiSearch } from "react-icons/fi";
 import { FaEthereum } from "react-icons/fa";
+import { ethers } from "ethers";
+import usePresale from "../../../hooks/usePresale";
 
 export default function HeroSection({ openWallet: externalOpenWallet, setOpenWallet: externalSetOpenWallet }) {
   const [internalOpenWallet, setInternalOpenWallet] = useState(false);
@@ -324,100 +326,204 @@ function CircleIcon({ href, icon }) {
 }
 
 function BuyBox({ setOpenWallet }) {
-  const [selectedToken, setSelectedToken] = useState("ETH");
+  const {
+    account,
+    ethBalance,
+    tokenPrice,
+    isConnected,
+    isPending,
+    txHash,
+    txStatus,
+    error,
+    connectWallet,
+    buyTokens,
+  } = usePresale();
+
+  const [ethAmount, setEthAmount] = useState("");
+
+  // ── Derived: estimated $OZ to receive ─────────────────────────────────
+  const estimatedTokens = useMemo(() => {
+    if (!tokenPrice || !ethAmount || Number(ethAmount) <= 0) return "0";
+    try {
+      const weiIn    = ethers.parseEther(String(ethAmount));
+      const rawUnits = (weiIn * ethers.parseEther("1")) / tokenPrice;
+      return Number(ethers.formatEther(rawUnits)).toLocaleString("en-US", {
+        maximumFractionDigits: 4,
+      });
+    } catch {
+      return "0";
+    }
+  }, [tokenPrice, ethAmount]);
+
+  const tokenPriceLabel = tokenPrice
+    ? `${ethers.formatEther(tokenPrice)} ETH / token`
+    : "—";
+
+  // ── Handlers ──────────────────────────────────────────────────────────
+  const handleMax = () => {
+    if (!isConnected) return;
+    const max = Math.max(0, parseFloat(ethBalance) - 0.01).toFixed(6);
+    setEthAmount(max > 0 ? max : "");
+  };
+
+  const handleBuy = async () => {
+    await buyTokens(ethAmount);
+  };
+
+  const truncate = (addr) =>
+    addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : "";
+
+  // ── Status badge ──────────────────────────────────────────────────────
+  const StatusBadge = () => {
+    if (txStatus === "pending") {
+      return (
+        <div className="flex items-center gap-2 text-yellow-400 text-sm mb-4 animate-pulse">
+          <svg className="animate-spin h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span>
+            Pending…{" "}
+            {txHash && (
+              <span className="font-mono text-xs opacity-75">
+                {txHash.slice(0, 14)}…
+              </span>
+            )}
+          </span>
+        </div>
+      );
+    }
+
+    if (txStatus === "success") {
+      return (
+        <div className="mb-4 p-3 rounded-2xl bg-[rgba(111,248,213,0.08)] border border-[var(--accent-mint)]/30 text-sm text-[var(--accent-mint)]">
+          <p className="font-semibold mb-0.5">Purchase successful!</p>
+          {txHash && (
+            <p className="font-mono text-xs opacity-70 break-all">
+              TX: {txHash}
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    if (txStatus === "error" && error) {
+      return (
+        <div className="mb-4 p-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-sm text-red-400 break-words">
+          {error}
+        </div>
+      );
+    }
+
+    // Show connection errors even before any tx
+    if (error && txStatus === "idle") {
+      return (
+        <div className="mb-4 p-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-sm text-red-400 break-words">
+          {error}
+        </div>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <div className="mt-10 w-full glass-panel rounded-3xl p-8 text-white border border-white/10">
-      
-      {/* Wallet Info */}
+
+      {/* ── Top row: balance + price ──────────────────────────────────── */}
       <div className="flex justify-between text-xs text-[#cbe7df] mb-4">
         <p>
-          Wallet Balance <span className="text-white">0.000000 ETH</span>
+          Wallet Balance{" "}
+          <span className="text-white font-medium">
+            {isConnected ? `${parseFloat(ethBalance).toFixed(4)} ETH` : "—"}
+          </span>
         </p>
         <p>
-          $OZ Owned <span className="text-[var(--accent-mint)]">0.00 $OZ</span>
+          Token Price{" "}
+          <span className="text-[var(--accent-mint)] font-medium">
+            {tokenPriceLabel}
+          </span>
         </p>
       </div>
 
-      {/* Amount Input */}
-      <div className="flex flex-col md:flex-row gap-3 mb-4">
-        <div className="flex items-center border border-white/10 bg-[rgba(3,15,20,0.65)] rounded-3xl px-4 py-3 flex-grow">
-          <FaEthereum className="text-zinc-500 mr-2" />
-          <input
-            type="number"
-            className="bg-transparent outline-none flex-1 text-white placeholder-[#7ca79c]"
-            placeholder="Input Amount"
-          />
-            <button 
-              onClick={() => setOpenWallet(true)}
-            className="ml-3 px-3 text-2xl font-semibold rounded-lg bg-white/10 border border-white/20 hover:border-[var(--accent-mint)] transition"
-          >
-            MAX
-          </button>
-        </div>
-
-        {/* Token Selection */}
-        <div className="flex gap-3">
-            {["ETH", "USDT", "USDC"].map((t) => (
-            <button
-              key={t}
-              onClick={() => {
-                setSelectedToken(t);
-                setOpenWallet(true);
-              }}
-              className={`px-5 py-3 rounded-3xl font-medium transition ${
-                selectedToken === t
-                  ? "bg-gradient-to-r from-[#4cf5c8] to-[#b6ff39] text-black shadow-[0_0_25px_rgba(111,248,213,0.45)]"
-                  : "bg-white/5 border border-white/10 text-white hover:border-[var(--accent-mint)]"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Referral Code */}
+      {/* ── ETH input ─────────────────────────────────────────────────── */}
       <div className="flex items-center border border-white/10 bg-[rgba(3,15,20,0.65)] rounded-3xl px-4 py-3 mb-4">
+        <FaEthereum className="text-zinc-500 mr-2 flex-shrink-0" />
         <input
-          type="text"
-          className="bg-transparent w-full text-white text-sm outline-none"
-          placeholder="Referral Code (Optional)"
+          type="number"
+          min="0"
+          step="0.001"
+          value={ethAmount}
+          onChange={(e) => setEthAmount(e.target.value)}
+          className="bg-transparent outline-none flex-1 text-white placeholder-[#7ca79c] min-w-0"
+          placeholder="ETH Amount"
         />
-        <FiCopy className="text-zinc-400 text-lg cursor-pointer hover:text-[var(--accent-mint)]" />
-      </div>
-
-      {/* Summary */}
-      <div className="flex justify-between text-sm text-[#cbe7df] mb-6">
-        <p>
-          You will receive: <span className="text-[var(--accent-mint)]">0 $OZ</span>
-        </p>
-        <p>
-          Network: <span className="text-white">Ethereum</span>
-        </p>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <button
-          className="border border-[var(--accent-mint)] text-[var(--accent-mint)] font-semibold text-2xl py-2 rounded-full shadow-[0_0_25px_rgba(111,248,213,0.35)] hover:bg-[var(--accent-mint)]/10 transition-all duration-300"
-          onClick={() => setOpenWallet(true)}
+          onClick={handleMax}
+          disabled={!isConnected}
+          className="ml-3 px-3 py-1 text-sm font-semibold rounded-lg bg-white/10 border border-white/20 hover:border-[var(--accent-mint)] hover:text-[var(--accent-mint)] transition disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
         >
-          Connect Wallet
+          MAX
         </button>
+      </div>
+
+      {/* ── Estimated tokens + network ────────────────────────────────── */}
+      <div className="flex justify-between text-sm text-[#cbe7df] mb-5">
+        <p>
+          You will receive:{" "}
+          <span className="text-[var(--accent-mint)] font-semibold">
+            {estimatedTokens} $OZ
+          </span>
+        </p>
+        <p>
+          Network:{" "}
+          <span className="text-white">
+            {isConnected ? "Hardhat Local" : "Not connected"}
+          </span>
+        </p>
+      </div>
+
+      {/* ── Transaction status ────────────────────────────────────────── */}
+      <StatusBadge />
+
+      {/* ── Action buttons ────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {!isConnected ? (
+          <button
+            onClick={connectWallet}
+            className="border border-[var(--accent-mint)] text-[var(--accent-mint)] font-semibold text-xl py-3 rounded-full shadow-[0_0_25px_rgba(111,248,213,0.35)] hover:bg-[var(--accent-mint)]/10 transition-all duration-300"
+          >
+            Connect Wallet
+          </button>
+        ) : (
+          <button
+            onClick={handleBuy}
+            disabled={isPending || !ethAmount || Number(ethAmount) <= 0}
+            className="bg-gradient-to-r from-[#4cf5c8] to-[#b6ff39] text-black font-bold text-xl py-3 rounded-full shadow-[0_0_25px_rgba(111,248,213,0.45)] hover:opacity-90 active:scale-95 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isPending ? "Buying…" : "Buy $OZ"}
+          </button>
+        )}
 
         <button
-          className="bg-white/10 border border-white/15 text-white text-2xl font-semibold py-3 rounded-full hover:border-[var(--accent-mint)] transition"
+          className="bg-white/10 border border-white/15 text-white text-xl font-semibold py-3 rounded-full hover:border-[var(--accent-mint)] transition"
           onClick={() =>
-            window.open(
-              "https://docs.ozak.ai/How-to-Acquire-OZ-Tokens/",
-              "_blank"
-            )
+            window.open("https://docs.ozak.ai/How-to-Acquire-OZ-Tokens/", "_blank")
           }
         >
           How to Buy?
         </button>
       </div>
+
+      {/* ── Connected address pill ───────────────────────────────────── */}
+      {isConnected && (
+        <p className="mt-5 text-center text-xs text-zinc-500">
+          Connected:{" "}
+          <span className="text-[var(--accent-mint)] font-mono tracking-wide">
+            {truncate(account)}
+          </span>
+        </p>
+      )}
     </div>
   );
 }

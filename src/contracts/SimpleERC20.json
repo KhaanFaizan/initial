@@ -294,6 +294,6 @@
       "type": "function"
     }
   ],
-  "network": "hardhat",
-  "deployedAt": 1781814158
+  "network": "localhost",
+  "deployedAt": 1781814741
 }
